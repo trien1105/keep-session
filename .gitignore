@@ -1,0 +1,11 @@
+# Không commit file chứa credentials thật
+config.json
+
+# Log files
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.env

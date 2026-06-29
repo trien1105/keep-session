@@ -1,0 +1,50 @@
+name: GA Session Keeper — Auto Run
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:        # Cho phép chạy thủ công từ GitHub UI
+  schedule:
+    # Chạy lại mỗi 5 tiếng 45 phút để tránh GitHub timeout 6h
+    - cron: '0 */5 * * *'
+
+jobs:
+  keep-alive:
+    name: Keep GA Sessions Alive
+    runs-on: ubuntu-latest
+    timeout-minutes: 350      # ~5h50m — sát giới hạn 6h của GitHub
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: ga_session_keeper/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r ga_session_keeper/requirements.txt
+
+      - name: Run GA Session Keeper
+        env:
+          GA4_MEASUREMENT_ID: ${{ secrets.GA4_MEASUREMENT_ID }}
+          GA4_API_SECRET: ${{ secrets.GA4_API_SECRET }}
+          UA_TRACKING_ID: ${{ secrets.UA_TRACKING_ID }}
+          TARGET_URL: ${{ secrets.TARGET_URL }}
+          NUM_VIRTUAL_USERS: "5"
+          HIT_INTERVAL_MIN: "25"
+          HIT_INTERVAL_MAX: "40"
+          RUN_FOREVER: "false"
+          RUN_DURATION_HOURS: "5.5"
+        run: python ga_session_keeper/ga_keeper.py
+
+      - name: Upload log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ga-keeper-log-${{ github.run_number }}
+          path: ga_keeper.log
+          retention-days: 7
