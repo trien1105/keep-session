@@ -34,7 +34,7 @@ jobs:
       - name: Run GA Session Keeper
         env:
           TARGET_URL: ${{ secrets.TARGET_URL }}
-          NUM_VIRTUAL_USERS: "5"
+          NUM_VIRTUAL_USERS: "16"
           SESSION_DURATION_MIN: "120"
           SESSION_DURATION_MAX: "300"
           PAGE_STAY_MIN: "20"
