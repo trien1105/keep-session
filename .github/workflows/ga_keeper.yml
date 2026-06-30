@@ -1,24 +1,18 @@
-name: GA Session Keeper — Auto Run
+name: GA Engagement Keeper — Auto Run
 
 on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
   schedule:
-    # ──────────────────────────────────────────────────────────────
     # Giờ VN (UTC+7): chỉ chạy 08:00 – 23:00
-    # Cron dùng giờ UTC: 08:00 VN = 01:00 UTC | 23:00 VN = 16:00 UTC
-    # Trigger lúc 01:00 UTC (= 08:00 VN) — khởi động buổi sáng
-    - cron: '0 1 * * *'
-    # Trigger lúc 06:00 UTC (= 13:00 VN) — giữa ngày
-    - cron: '0 6 * * *'
-    # Trigger lúc 11:00 UTC (= 18:00 VN) — buổi chiều tối
-    - cron: '0 11 * * *'
-    # ──────────────────────────────────────────────────────────────
+    - cron: '0 1 * * *'   # 08:00 VN
+    - cron: '0 6 * * *'   # 13:00 VN
+    - cron: '0 11 * * *'  # 18:00 VN
 
 jobs:
   keep-alive:
-    name: Keep GA Sessions Alive
+    name: Keep GA Engagement Alive
     runs-on: ubuntu-latest
     timeout-minutes: 350
 
@@ -26,18 +20,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: "[Guard] Kiểm tra khung giờ hoạt động (08:00 – 23:00 VN)"
+      - name: "[Guard] Kiểm tra khung giờ (08:00 – 23:00 VN)"
         id: time_check
         run: |
-          # Giờ VN = UTC+7
           VN_HOUR=$(TZ='Asia/Ho_Chi_Minh' date +%H)
-          VN_HOUR=$((10#$VN_HOUR))   # ép kiểu số nguyên
-          echo "Giờ VN hiện tại: $VN_HOUR:xx"
+          VN_HOUR=$((10#$VN_HOUR))
+          echo "Giờ VN: $VN_HOUR:xx"
           if [ $VN_HOUR -lt 8 ] || [ $VN_HOUR -ge 23 ]; then
-            echo "⛔ Ngoài khung giờ hoạt động (08:00–23:00 VN). Dừng workflow."
+            echo "⛔ Ngoài khung giờ. Dừng."
             echo "skip=true" >> $GITHUB_OUTPUT
           else
-            echo "✅ Trong khung giờ hoạt động. Tiếp tục chạy."
+            echo "✅ Trong khung giờ. Tiếp tục."
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
@@ -53,19 +46,15 @@ jobs:
         if: steps.time_check.outputs.skip == 'false'
         run: pip install -r requirements.txt
 
-      - name: Install Playwright browsers
-        if: steps.time_check.outputs.skip == 'false'
-        run: playwright install chromium --with-deps
+      # Không cần cài Playwright nữa — script dùng aiohttp thuần
 
-      - name: Run GA Session Keeper
+      - name: Run GA Engagement Keeper
         if: steps.time_check.outputs.skip == 'false'
         env:
-          TARGET_URL: ${{ secrets.TARGET_URL }}
+          GA4_MEASUREMENT_ID: ${{ secrets.GA4_MEASUREMENT_ID }}
+          GA4_API_SECRET:     ${{ secrets.GA4_API_SECRET }}
           NUM_VIRTUAL_USERS: "16"
           SESSION_DURATION_MIN: "480"
           SESSION_DURATION_MAX: "900"
-          PAGE_STAY_MIN: "60"
-          PAGE_STAY_MAX: "180"
-          RUN_FOREVER: "false"
           RUN_DURATION_HOURS: "5.5"
         run: python ga_keeper.py
