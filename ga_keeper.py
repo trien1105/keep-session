@@ -51,7 +51,7 @@ VIEWPORTS = [
 def load_config() -> dict:
     cfg = {
         "target_url":           os.environ.get("TARGET_URL", "https://coinsight.click"),
-        "num_virtual_users":    int(os.environ.get("NUM_VIRTUAL_USERS", "4")),   # giảm users để bớt views/events
+        "num_virtual_users":    int(os.environ.get("NUM_VIRTUAL_USERS", "16")),   # giảm users để bớt views/events
         "session_duration_min": int(os.environ.get("SESSION_DURATION_MIN", "120")),
         "session_duration_max": int(os.environ.get("SESSION_DURATION_MAX", "300")),
         "page_stay_min":        int(os.environ.get("PAGE_STAY_MIN", "20")),
