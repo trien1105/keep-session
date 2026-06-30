@@ -61,7 +61,7 @@ jobs:
         if: steps.time_check.outputs.skip == 'false'
         env:
           TARGET_URL: ${{ secrets.TARGET_URL }}
-          NUM_VIRTUAL_USERS: "16"
+          NUM_VIRTUAL_USERS: "4"
           SESSION_DURATION_MIN: "480"
           SESSION_DURATION_MAX: "900"
           PAGE_STAY_MIN: "60"

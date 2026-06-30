@@ -51,7 +51,7 @@ VIEWPORTS = [
 def load_config() -> dict:
     cfg = {
         "target_url":           os.environ.get("TARGET_URL", "https://coinsight.click"),
-        "num_virtual_users":    int(os.environ.get("NUM_VIRTUAL_USERS", "16")),
+        "num_virtual_users":    int(os.environ.get("NUM_VIRTUAL_USERS", "4")),   # giảm users để bớt views/events
         "session_duration_min": int(os.environ.get("SESSION_DURATION_MIN", "120")),
         "session_duration_max": int(os.environ.get("SESSION_DURATION_MAX", "300")),
         "page_stay_min":        int(os.environ.get("PAGE_STAY_MIN", "20")),
@@ -100,45 +100,37 @@ async def one_session(playwright, uid: int, cfg: dict):
         """)
 
         page = await ctx.new_page()
-        session_end  = time.time() + random.randint(cfg["session_duration_min"], cfg["session_duration_max"])
-        pages_visited = 0
+        session_duration = random.randint(cfg["session_duration_min"], cfg["session_duration_max"])
+        session_end = time.time() + session_duration
 
-        # Land on homepage first
+        # Chỉ load 1 trang duy nhất — không navigate sang trang khác
+        # để tránh phát sinh thêm pageview / event
+        landing = base_url + "/"
         try:
-            await page.goto(base_url + "/", wait_until="domcontentloaded", timeout=30000)
-            pages_visited += 1
+            await page.goto(landing, wait_until="domcontentloaded", timeout=30000)
+            log.info(f"[U{uid:02d}] Loaded {landing} | will stay {session_duration}s")
         except Exception as e:
-            log.warning(f"[U{uid:02d}] Home load failed: {e}")
+            log.warning(f"[U{uid:02d}] Load failed: {e}")
 
+        # Scroll + mouse liên tục suốt session để duy trì engagement
         while time.time() < session_end:
-            path = random.choice(PAGES)
-            url  = base_url + path
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                pages_visited += 1
-                stay = random.randint(cfg["page_stay_min"], cfg["page_stay_max"])
-                log.info(f"[U{uid:02d}] {url}  stay={stay}s")
-
-                # Simulate natural scrolling & mouse movement
-                steps = stay // 5
-                for _ in range(max(1, steps)):
-                    await page.evaluate(f"window.scrollBy(0, {random.randint(80, 350)})")
-                    try:
-                        await page.mouse.move(
-                            random.randint(50, viewport["width"]  - 50),
-                            random.randint(50, viewport["height"] - 50),
-                        )
-                    except Exception:
-                        pass
-                    await asyncio.sleep(random.uniform(4.0, 7.0))
-
+                # Scroll lên/xuống tự nhiên
+                scroll_dir = random.choice([1, -1])
+                await page.evaluate(f"window.scrollBy(0, {scroll_dir * random.randint(80, 300)})")
+                # Di chuột ngẫu nhiên
+                await page.mouse.move(
+                    random.randint(50, viewport["width"]  - 50),
+                    random.randint(50, viewport["height"] - 50),
+                )
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
-                log.warning(f"[U{uid:02d}] Error on {url}: {e}")
-                await asyncio.sleep(5)
+            except Exception:
+                pass
+            await asyncio.sleep(random.uniform(4.0, 8.0))
 
-        log.info(f"[U{uid:02d}] SESSION DONE | {pages_visited} pages")
+        remaining = max(0, session_end - time.time())
+        log.info(f"[U{uid:02d}] SESSION DONE | stayed {session_duration}s on {landing}")
     finally:
         try:
             await browser.close()
