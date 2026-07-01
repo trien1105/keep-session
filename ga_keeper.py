@@ -39,6 +39,7 @@ def load_config() -> dict:
         "session_duration_min": int(os.environ.get("SESSION_DURATION_MIN", "480")),
         "session_duration_max": int(os.environ.get("SESSION_DURATION_MAX", "900")),
         "run_duration_hours":   float(os.environ.get("RUN_DURATION_HOURS", "5.5")),
+        "target_url":           os.environ.get("TARGET_URL", "https://coinsight.click"),
     }
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -57,30 +58,23 @@ def make_session_id() -> str:
     return str(int(time.time()) + random.randint(0, 9999))
 
 
-async def send_engagement(
+async def send_event(
     session: aiohttp.ClientSession,
     measurement_id: str,
     api_secret: str,
     client_id: str,
-    session_id: str,
-    engagement_ms: int,
+    event_name: str,
+    event_params: dict,
     uid: int,
 ):
-    """
-    Gửi DUY NHẤT event user_engagement.
-    KHÔNG gửi page_view → Views không tăng.
-    """
+    """Gửi một event tùy chỉnh qua GA4 Measurement Protocol."""
     payload = {
         "client_id": client_id,
         "non_personalized_ads": False,
         "events": [
             {
-                "name": "user_engagement",
-                "params": {
-                    "session_id": session_id,
-                    "engagement_time_msec": engagement_ms,
-                    # KHÔNG có page_view, KHÔNG có event_count trigger
-                },
+                "name": event_name,
+                "params": event_params,
             }
         ],
     }
@@ -90,7 +84,7 @@ async def send_engagement(
     try:
         async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
             if resp.status == 204:
-                log.debug(f"[U{uid:02d}] ✓ sent engagement {engagement_ms}ms")
+                log.debug(f"[U{uid:02d}] ✓ sent event '{event_name}'")
             else:
                 body = await resp.text()
                 log.warning(f"[U{uid:02d}] GA returned {resp.status}: {body[:200]}")
@@ -102,11 +96,17 @@ async def virtual_user(uid: int, cfg: dict, end_time: float):
     """
     Mỗi virtual user:
     - Tạo client_id & session_id riêng
-    - Cứ mỗi 30–60s gửi 1 user_engagement với engagement_time_msec = khoảng thời gian đó
+    - Đầu session, gửi 1 event page_view để khởi tạo và map với URL (1 view duy nhất)
+    - Cứ mỗi 30–60s gửi 1 event engagement_ping mang theo engagement_time_msec để tích lũy thời gian ở lại trang
     - Khi session hết hạn, tạo session mới
     """
     measurement_id = cfg["measurement_id"]
     api_secret     = cfg["api_secret"]
+    target_url     = cfg["target_url"]
+
+    from urllib.parse import urlparse
+    parsed = urlparse(target_url)
+    page_title = parsed.netloc or "CoinSight"
 
     if not measurement_id or not api_secret:
         log.error("Thiếu GA_MEASUREMENT_ID hoặc GA_API_SECRET! Kiểm tra GitHub Secrets.")
@@ -123,18 +123,44 @@ async def virtual_user(uid: int, cfg: dict, end_time: float):
 
             log.info(f"[U{uid:02d}] Session {session_count} | duration={session_duration}s | cid={client_id}")
 
+            # 1. Gửi page_view khởi tạo session duy nhất một lần (chỉ phát sinh 1 view duy nhất)
+            log.info(f"[U{uid:02d}] Gửi page_view để khởi tạo session trên {target_url}")
+            await send_event(
+                session=http,
+                measurement_id=measurement_id,
+                api_secret=api_secret,
+                client_id=client_id,
+                event_name="page_view",
+                event_params={
+                    "session_id": session_id,
+                    "page_location": target_url,
+                    "page_title": page_title,
+                    "engagement_time_msec": 100,
+                },
+                uid=uid
+            )
+
+            # 2. Duy trì và tích lũy engagement time bằng các sự kiện ping phụ (không phải page_view)
             while time.time() < session_end and time.time() < end_time:
-                # Khoảng ping mỗi 30–60 giây — đây là "engagement period"
                 ping_interval = random.randint(30, 60)
                 await asyncio.sleep(ping_interval)
 
-                # Gửi engagement_time_msec = thời gian vừa ở trên trang (ms)
                 engagement_ms = ping_interval * 1000 + random.randint(-2000, 2000)
-                engagement_ms = max(5000, engagement_ms)  # tối thiểu 5s
+                engagement_ms = max(5000, engagement_ms)
 
-                await send_engagement(
-                    http, measurement_id, api_secret,
-                    client_id, session_id, engagement_ms, uid,
+                await send_event(
+                    session=http,
+                    measurement_id=measurement_id,
+                    api_secret=api_secret,
+                    client_id=client_id,
+                    event_name="engagement_ping",
+                    event_params={
+                        "session_id": session_id,
+                        "page_location": target_url,
+                        "page_title": page_title,
+                        "engagement_time_msec": engagement_ms,
+                    },
+                    uid=uid
                 )
 
             log.info(f"[U{uid:02d}] Session {session_count} done | sleeping 10s")
@@ -149,6 +175,7 @@ async def main():
 
     cfg = load_config()
 
+    log.info(f"Target URL     : {cfg['target_url']}")
     log.info(f"Measurement ID : {cfg['measurement_id'] or '❌ CHƯA SET'}")
     log.info(f"API Secret     : {'✅ SET' if cfg['api_secret'] else '❌ CHƯA SET'}")
     log.info(f"Virtual users  : {cfg['num_virtual_users']}")
