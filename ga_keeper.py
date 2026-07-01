@@ -95,10 +95,9 @@ async def send_event(
 async def virtual_user(uid: int, cfg: dict, end_time: float):
     """
     Mỗi virtual user:
-    - Tạo client_id & session_id riêng
-    - Đầu session, gửi 1 event page_view để khởi tạo và map với URL (1 view duy nhất)
+    - Tạo client_id & session_id duy nhất cho toàn bộ thời gian chạy (5.5 tiếng)
+    - Gửi duy nhất 1 event page_view để khởi tạo session và định nghĩa trang (chỉ tính 1 view)
     - Cứ mỗi 30–60s gửi 1 event engagement_ping mang theo engagement_time_msec để tích lũy thời gian ở lại trang
-    - Khi session hết hạn, tạo session mới
     """
     measurement_id = cfg["measurement_id"]
     api_secret     = cfg["api_secret"]
@@ -113,58 +112,57 @@ async def virtual_user(uid: int, cfg: dict, end_time: float):
         return
 
     async with aiohttp.ClientSession() as http:
-        session_count = 0
+        client_id  = make_client_id()
+        session_id = make_session_id()
+
+        log.info(f"[U{uid:02d}] Bắt đầu session duy nhất | cid={client_id} | sid={session_id}")
+
+        # 1. Gửi page_view khởi tạo session duy nhất một lần (chỉ phát sinh 1 view duy nhất cho cả đợt chạy)
+        log.info(f"[U{uid:02d}] Gửi page_view để khởi tạo session trên {target_url}")
+        await send_event(
+            session=http,
+            measurement_id=measurement_id,
+            api_secret=api_secret,
+            client_id=client_id,
+            event_name="page_view",
+            event_params={
+                "session_id": session_id,
+                "page_location": target_url,
+                "page_title": page_title,
+                "engagement_time_msec": 100,
+            },
+            uid=uid
+        )
+
+        # 2. Duy trì và tích lũy engagement time bằng các sự kiện ping phụ cho đến hết thời gian chạy
         while time.time() < end_time:
-            session_count += 1
-            client_id  = make_client_id()
-            session_id = make_session_id()
-            session_duration = random.randint(cfg["session_duration_min"], cfg["session_duration_max"])
-            session_end = time.time() + session_duration
+            ping_interval = random.randint(30, 60)
+            # Không ngủ quá thời gian kết thúc
+            sleep_time = min(ping_interval, max(1, int(end_time - time.time())))
+            await asyncio.sleep(sleep_time)
 
-            log.info(f"[U{uid:02d}] Session {session_count} | duration={session_duration}s | cid={client_id}")
+            if time.time() >= end_time:
+                break
 
-            # 1. Gửi page_view khởi tạo session duy nhất một lần (chỉ phát sinh 1 view duy nhất)
-            log.info(f"[U{uid:02d}] Gửi page_view để khởi tạo session trên {target_url}")
+            engagement_ms = sleep_time * 1000 + random.randint(-2000, 2000)
+            engagement_ms = max(5000, engagement_ms)
+
             await send_event(
                 session=http,
                 measurement_id=measurement_id,
                 api_secret=api_secret,
                 client_id=client_id,
-                event_name="page_view",
+                event_name="engagement_ping",
                 event_params={
                     "session_id": session_id,
                     "page_location": target_url,
                     "page_title": page_title,
-                    "engagement_time_msec": 100,
+                    "engagement_time_msec": engagement_ms,
                 },
                 uid=uid
             )
 
-            # 2. Duy trì và tích lũy engagement time bằng các sự kiện ping phụ (không phải page_view)
-            while time.time() < session_end and time.time() < end_time:
-                ping_interval = random.randint(30, 60)
-                await asyncio.sleep(ping_interval)
-
-                engagement_ms = ping_interval * 1000 + random.randint(-2000, 2000)
-                engagement_ms = max(5000, engagement_ms)
-
-                await send_event(
-                    session=http,
-                    measurement_id=measurement_id,
-                    api_secret=api_secret,
-                    client_id=client_id,
-                    event_name="engagement_ping",
-                    event_params={
-                        "session_id": session_id,
-                        "page_location": target_url,
-                        "page_title": page_title,
-                        "engagement_time_msec": engagement_ms,
-                    },
-                    uid=uid
-                )
-
-            log.info(f"[U{uid:02d}] Session {session_count} done | sleeping 10s")
-            await asyncio.sleep(random.uniform(5, 15))
+        log.info(f"[U{uid:02d}] Hoàn thành session duy nhất.")
 
 
 async def main():
