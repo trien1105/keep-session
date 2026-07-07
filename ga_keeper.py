@@ -36,6 +36,8 @@ def load_config() -> dict:
         "measurement_id":       os.environ.get("GA4_MEASUREMENT_ID", ""),
         "api_secret":           os.environ.get("GA4_API_SECRET", ""),
         "num_virtual_users":    int(os.environ.get("NUM_VIRTUAL_USERS", "16")),
+        "num_virtual_users_min": int(os.environ.get("NUM_VIRTUAL_USERS_MIN", "0")),
+        "num_virtual_users_max": int(os.environ.get("NUM_VIRTUAL_USERS_MAX", "0")),
         "session_duration_min": int(os.environ.get("SESSION_DURATION_MIN", "480")),
         "session_duration_max": int(os.environ.get("SESSION_DURATION_MAX", "900")),
         "run_duration_hours":   float(os.environ.get("RUN_DURATION_HOURS", "5.5")),
@@ -184,6 +186,11 @@ async def main():
     log.info("=" * 60)
 
     cfg = load_config()
+
+    if cfg.get("num_virtual_users_min", 0) > 0 and cfg.get("num_virtual_users_max", 0) >= cfg["num_virtual_users_min"]:
+        num_users = random.randint(cfg["num_virtual_users_min"], cfg["num_virtual_users_max"])
+        cfg["num_virtual_users"] = num_users
+        log.info(f"Đã chọn ngẫu nhiên số lượng user ảo: {num_users} (trong khoảng {cfg['num_virtual_users_min']}–{cfg['num_virtual_users_max']})")
 
     log.info(f"Target URL     : {cfg['target_url']}")
     log.info(f"Measurement ID : {cfg['measurement_id'] or '❌ CHƯA SET'}")
