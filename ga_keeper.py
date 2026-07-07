@@ -40,6 +40,7 @@ def load_config() -> dict:
         "session_duration_max": int(os.environ.get("SESSION_DURATION_MAX", "900")),
         "run_duration_hours":   float(os.environ.get("RUN_DURATION_HOURS", "5.5")),
         "target_url":           os.environ.get("TARGET_URL", "https://coinsight.click"),
+        "stagger_max_min":      float(os.environ.get("STAGGER_MAX_MIN", "0")),
     }
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -95,6 +96,7 @@ async def send_event(
 async def virtual_user(uid: int, cfg: dict, end_time: float):
     """
     Mỗi virtual user:
+    - Trì hoãn ngẫu nhiên trước khi chạy (stagger start)
     - Tạo client_id & session_id duy nhất cho toàn bộ thời gian chạy (5.5 tiếng)
     - Gửi duy nhất 1 event page_view để khởi tạo session và định nghĩa trang (chỉ tính 1 view)
     - Cứ mỗi 30–60s gửi 1 event engagement_ping mang theo engagement_time_msec để tích lũy thời gian ở lại trang
@@ -110,6 +112,16 @@ async def virtual_user(uid: int, cfg: dict, end_time: float):
     if not measurement_id or not api_secret:
         log.error("Thiếu GA_MEASUREMENT_ID hoặc GA_API_SECRET! Kiểm tra GitHub Secrets.")
         return
+
+    # 0. Trì hoãn khởi động ngẫu nhiên (stagger start) để tránh dồn dập
+    stagger_max_min = cfg.get("stagger_max_min", 0)
+    if stagger_max_min > 0:
+        stagger_max_sec = stagger_max_min * 60
+        max_possible_delay = max(0.0, end_time - time.time() - 300)  # Chừa ít nhất 5 phút
+        delay_sec = random.uniform(0, min(stagger_max_sec, max_possible_delay))
+        if delay_sec > 0:
+            log.info(f"[U{uid:02d}] Trì hoãn khởi động {delay_sec:.1f}s để tránh dồn dập (stagger)...")
+            await asyncio.sleep(delay_sec)
 
     async with aiohttp.ClientSession() as http:
         client_id  = make_client_id()
@@ -179,6 +191,7 @@ async def main():
     log.info(f"Virtual users  : {cfg['num_virtual_users']}")
     log.info(f"Session time   : {cfg['session_duration_min']}–{cfg['session_duration_max']}s")
     log.info(f"Run duration   : {cfg['run_duration_hours']} hours")
+    log.info(f"Stagger max    : {cfg.get('stagger_max_min', 0)} minutes")
     log.info("=" * 60)
 
     if not cfg["measurement_id"] or not cfg["api_secret"]:

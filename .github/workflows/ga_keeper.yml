@@ -5,10 +5,8 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
   schedule:
-    # Giờ VN (UTC+7): chỉ chạy 08:00 – 23:00
-    - cron: '0 1 * * *'   # 08:00 VN
-    - cron: '0 6 * * *'   # 13:00 VN
-    - cron: '0 11 * * *'  # 18:00 VN
+    # Giờ VN (UTC+7): chạy lúc 20:00 hàng ngày (13:00 UTC)
+    - cron: '0 13 * * *'
 
 jobs:
   keep-alive:
@@ -53,8 +51,9 @@ jobs:
         env:
           GA4_MEASUREMENT_ID: ${{ secrets.GA4_MEASUREMENT_ID }}
           GA4_API_SECRET:     ${{ secrets.GA4_API_SECRET }}
-          NUM_VIRTUAL_USERS: "16"
+          NUM_VIRTUAL_USERS: "100"
           SESSION_DURATION_MIN: "480"
           SESSION_DURATION_MAX: "900"
-          RUN_DURATION_HOURS: "5.5"
+          RUN_DURATION_HOURS: "2.0"
+          STAGGER_MAX_MIN: "90"
         run: python ga_keeper.py
