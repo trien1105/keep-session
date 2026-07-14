@@ -5,8 +5,8 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
   schedule:
-    # Giờ VN (UTC+7): chạy lúc 20:00 hàng ngày (13:00 UTC)
-    - cron: '0 13 * * *'
+    # Run every 5 hours to cover 24/7 with 5.5 hours run duration
+    - cron: '0 */5 * * *'
 
 jobs:
   keep-alive:
@@ -18,22 +18,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: "[Guard] Kiểm tra khung giờ (08:00 – 23:00 VN)"
-        id: time_check
-        run: |
-          VN_HOUR=$(TZ='Asia/Ho_Chi_Minh' date +%H)
-          VN_HOUR=$((10#$VN_HOUR))
-          echo "Giờ VN: $VN_HOUR:xx"
-          if [ $VN_HOUR -lt 8 ] || [ $VN_HOUR -ge 23 ]; then
-            echo "⛔ Ngoài khung giờ. Dừng."
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "✅ Trong khung giờ. Tiếp tục."
-            echo "skip=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Setup Python
-        if: steps.time_check.outputs.skip == 'false'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -41,13 +26,9 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Install dependencies
-        if: steps.time_check.outputs.skip == 'false'
         run: pip install -r requirements.txt
 
-      # Không cần cài Playwright nữa — script dùng aiohttp thuần
-
       - name: Run GA Engagement Keeper
-        if: steps.time_check.outputs.skip == 'false'
         env:
           GA4_MEASUREMENT_ID: ${{ secrets.GA4_MEASUREMENT_ID }}
           GA4_API_SECRET:     ${{ secrets.GA4_API_SECRET }}
@@ -56,6 +37,6 @@ jobs:
           NUM_VIRTUAL_USERS_MAX: "280"
           SESSION_DURATION_MIN: "480"
           SESSION_DURATION_MAX: "900"
-          RUN_DURATION_HOURS: "2.0"
+          RUN_DURATION_HOURS: "5.5"
           STAGGER_MAX_MIN: "90"
         run: python ga_keeper.py
