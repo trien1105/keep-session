@@ -8,6 +8,10 @@ on:
     # Run every 5 hours to cover 24/7 with 5.5 hours run duration
     - cron: '0 */5 * * *'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   keep-alive:
     name: Keep GA Engagement Alive
