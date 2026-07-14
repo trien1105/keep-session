@@ -32,11 +32,11 @@ jobs:
         env:
           GA4_MEASUREMENT_ID: ${{ secrets.GA4_MEASUREMENT_ID }}
           GA4_API_SECRET:     ${{ secrets.GA4_API_SECRET }}
-          NUM_VIRTUAL_USERS: "100"
-          NUM_VIRTUAL_USERS_MIN: "220"
-          NUM_VIRTUAL_USERS_MAX: "280"
+          NUM_VIRTUAL_USERS: "25"
+          NUM_VIRTUAL_USERS_MIN: "0"
+          NUM_VIRTUAL_USERS_MAX: "0"
           SESSION_DURATION_MIN: "480"
           SESSION_DURATION_MAX: "900"
           RUN_DURATION_HOURS: "5.5"
-          STAGGER_MAX_MIN: "90"
+          STAGGER_MAX_MIN: "10"
         run: python ga_keeper.py
